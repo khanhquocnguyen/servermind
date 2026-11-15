@@ -1,0 +1,65 @@
+# Traefik v3 reverse proxy — entrypoints: web (80) and websecure (443).
+# TLS: Cloudflare Origin Certificate from ./certs (no Let's Encrypt).
+#
+# Two containers:
+#   socket-proxy  read-only gate in front of /var/run/docker.sock. Traefik never touches the socket
+#                 directly, so a compromised Traefik can list containers but cannot create/exec any.
+#   traefik       the proxy itself; talks to socket-proxy over an isolated internal network.
+#
+# First run:
+#   bash add-cert.sh          # paste the Cloudflare origin cert, generates dynamic/tls.yml
+#   docker compose up -d
+#   docker compose logs -f traefik
+
+services:
+  socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    container_name: socket-proxy
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      # Only what Traefik's docker provider needs; everything else (incl. all POST) is denied.
+      CONTAINERS: 1   # GET /containers/*  (list + inspect, labels)
+      NETWORKS: 1     # GET /networks/*
+      EVENTS: 1       # start/stop notifications
+      VERSION: 1      # GET /version at startup
+      INFO: 1         # GET /info at startup
+      POST: 0         # no create / start / exec / ...
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - socket-proxy  # NO ports:, and not on traefik-proxy-network — apps cannot reach it
+
+  traefik:
+    image: traefik:v3.7
+    container_name: traefik
+    restart: unless-stopped
+    depends_on:
+      - socket-proxy
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - traefik-proxy-network
+      - socket-proxy
+    ports:
+      # Explicit 0.0.0.0: the daemon's default bind is 127.0.0.1 (set by 2-install-docker.sh).
+      # IPv4 only — keep Cloudflare DNS on A records (or add "[::]:80:80" / "[::]:443:443").
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+    volumes:
+      - ./traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./dynamic:/etc/traefik/dynamic:ro
+      - ./certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  traefik-proxy-network:
+    external: true   # created by 2-install-docker.sh
+  socket-proxy:
+    internal: true   # no route to the outside world; only socket-proxy and traefik are on it

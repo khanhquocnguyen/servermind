@@ -1,0 +1,29 @@
+# Cloudflare Tunnel — the public entry for a machine WITHOUT a public IP (dev laptop, home server).
+# Takes the place of "Cloudflare → <PUBLIC_IP>:443": cloudflared dials out to Cloudflare and hands every request to
+# Traefik over traefik-proxy-network. A server with a public IP does not need this folder.
+#
+# First run (see README.md):
+#   bash tunnel.sh zone <zone>              # once per Cloudflare zone → zones/<zone>.pem
+#   bash tunnel.sh init [credentials.json]  # create a tunnel (or adopt an existing one) → credentials.json + .env
+#   docker compose up -d
+#   bash tunnel.sh route <hostname>         # once per hostname: proxied CNAME → this tunnel
+
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.0
+    container_name: cloudflared
+    restart: unless-stopped
+    # Same uid as the owner of credentials.json (600), written to .env by tunnel.sh init.
+    user: "${TUNNEL_UID:?run: bash tunnel.sh init}:${TUNNEL_GID:?run: bash tunnel.sh init}"
+    security_opt:
+      - no-new-privileges:true
+    command: ["tunnel", "--no-autoupdate", "--config", "/etc/cloudflared/config.yml", "run", "${TUNNEL_ID:?run: bash tunnel.sh init}"]
+    volumes:
+      - ./config.yml:/etc/cloudflared/config.yml:ro
+      - ./credentials.json:/etc/cloudflared/credentials.json:ro
+    networks:
+      - traefik-proxy-network   # reaches Traefik by name; NO ports:
+
+networks:
+  traefik-proxy-network:
+    external: true   # created by 2-install-docker.sh

@@ -1,0 +1,29 @@
+# Minimal app behind Traefik. Copy this pattern for every real app.
+#
+#   docker compose up -d
+#   curl https://whoami.example.com     # after the DNS record (proxied) points at the server
+#
+# Notes:
+# - No `ports:` at all: Traefik reaches the container over traefik-proxy-network, nothing is
+#   published on the host.
+# - TLS, cloudflare-only, secure-headers and compress come from the websecure entrypoint; the app
+#   only declares its hostname and container port.
+
+services:
+  whoami:
+    image: traefik/whoami:latest
+    container_name: whoami
+    restart: unless-stopped
+    networks:
+      - traefik-proxy-network
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.whoami.rule: "Host(`whoami.example.com`)"
+      traefik.http.routers.whoami.entrypoints: websecure
+      traefik.http.services.whoami.loadbalancer.server.port: "80"
+      # Optional, for login/API endpoints:
+      # traefik.http.routers.whoami.middlewares: "rate-limit@file"
+
+networks:
+  traefik-proxy-network:
+    external: true

@@ -1,0 +1,35 @@
+# Cloudflare Origin Certificates (see ../certs/README.md). Hot-reloaded on change — no restart.
+#
+# This file is a PLACEHOLDER. `add-cert.sh` overwrites it from the files in certs/ — do not edit by hand.
+#
+# HOW TRAEFIK PICKS A CERT
+#   You never attach a cert to an app. For each HTTPS connection the browser sends the hostname (SNI);
+#   Traefik scans the `certificates` list below, picks the one whose names cover that hostname, and
+#   falls back to `defaultCertificate` if nothing matches. So: list every cert here once, and apps
+#   only need a Host() rule.
+#
+# ONE CERT PER DOMAIN IS ENOUGH
+#   An origin cert for "example.com, *.example.com" covers app1.example.com, api.example.com, ...
+#   You only need another cert when an app lives on a DIFFERENT domain.
+
+tls:
+  stores:
+    default:
+      defaultCertificate:            # served when no entry below matches the hostname
+        certFile: /certs/example.com.pem
+        keyFile: /certs/example.com.key
+
+  certificates:
+    - certFile: /certs/example.com.pem      # example.com + *.example.com
+      keyFile: /certs/example.com.key
+
+    # - certFile: /certs/other-app.io.pem   # a second domain
+    #   keyFile: /certs/other-app.io.key
+
+    # - certFile: /certs/third.dev.pem
+    #   keyFile: /certs/third.dev.key
+
+  options:
+    default:
+      minVersion: VersionTLS12
+      # Cipher suites: Traefik/Go defaults are modern and safe; not overriding on purpose.

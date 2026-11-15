@@ -1,0 +1,10 @@
+# One catch-all rule: every hostname routed to this tunnel goes to Traefik, which picks the app by Host() as usual.
+# The tunnel id is passed on the command line (docker-compose.yml, from .env), so this file is the same on every machine.
+credentials-file: /etc/cloudflared/credentials.json
+ingress:
+  - service: https://traefik:443
+    originRequest:
+      # SNI = the request's hostname, so Traefik selects the right router and certificate.
+      matchSNItoHost: true
+      # Origin CA certs are not publicly trusted, and the hop never leaves traefik-proxy-network.
+      noTLSVerify: true
